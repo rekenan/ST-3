@@ -1,91 +1,80 @@
 // Copyright 2024 MamedovKenan
 
-#include "gtest/gtest.h"
-#include "TimedDoor.h"
-#include <thread> // NOLINT [build/c++11]
-#include <chrono> // NOLINT [build/c++11]
-#include <stdexcept>
+#include <gtest/gtest.h>
 #include <gmock/gmock.h>
+#include <cstdint>
+#include <chrono> // NOLINT [build/c++11]
+#include <thread> // NOLINT [build/c++11]
+#include "TimedDoor.h"
 
-using ::testing::Mock;
-
-class MockDoor : public Door {
-public:
-    MOCK_METHOD(void, lock, (), (override));
-    MOCK_METHOD(void, unlock, (), (override));
-    MOCK_METHOD(bool, isDoorOpened, (), (override));
+class MockTimerClient : public TimerClient {
+ public:
+    MOCK_METHOD(void, Timeout, (), (override));
 };
 
 class TimedDoorTest : public ::testing::Test {
-protected:
-    TimedDoor* door;
-    Timer* timer;
-    DoorTimerAdapter* adapter;
+ protected:
+    TimedDoor door;
+    MockTimerClient mockClient;
+    Timer timer;
+
+    TimedDoorTest() : door(1), timer() {}
 
     void SetUp() override {
-        door = new TimedDoor(1);
-        timer = new Timer();
-        adapter = new DoorTimerAdapter(*door);
+        timer.tregister(door.getTimeOut(), &mockClient);
     }
 
     void TearDown() override {
-        delete door;
-        delete timer;
-        delete adapter;
+        testing::Mock::VerifyAndClearExpectations(&mockClient);
     }
 };
 
-TEST_F(TimedDoorTest, TimeoutThrowsWhenDoorOpenedTooLong) {
-    door->unlock();
-    EXPECT_THROW(timer->tregister(1, adapter), std::runtime_error);
+TEST_F(TimedDoorTest, Timeout) {
+    door.unlock();
+    std::this_thread::sleep_for(std::chrono::seconds(door.getTimeOut()));
+    EXPECT_THROW(door.throwState(), std::runtime_error);
 }
 
-TEST_F(TimedDoorTest, TimeoutDoesNotThrowWhenDoorClosed) {
-    door->lock();
-    EXPECT_NO_THROW(timer->tregister(1, adapter));
+TEST_F(TimedDoorTest, LockUnlock) {
+    std::this_thread::sleep_for(std::chrono::seconds(door.getTimeOut() + 1));
+    EXPECT_NO_THROW(door.throwState());
 }
 
-TEST_F(TimedDoorTest, AdapterTimeoutCallsThrowState) {
-    door->unlock();
-    timer->tregister(1, adapter);
-    EXPECT_THROW(adapter->Timeout(), std::runtime_error);
+TEST_F(TimedDoorTest, LockBeforeTimeout) {
+    std::this_thread::sleep_for(std::chrono::seconds(door.getTimeOut() + 1));
+    door.unlock();
+    EXPECT_THROW(door.throwState(), std::runtime_error);
 }
 
-TEST_F(TimedDoorTest, DoorIsInitiallyClosed) {
-    EXPECT_FALSE(door->isDoorOpened());
+TEST_F(TimedDoorTest, UnlockMth) {
+    door.unlock();
+    EXPECT_TRUE(door.isDoorOpened());
 }
 
-TEST_F(TimedDoorTest, DoorCanBeOpenedAndClosed) {
-    door->unlock();
-    EXPECT_TRUE(door->isDoorOpened());
-    door->lock();
-    EXPECT_FALSE(door->isDoorOpened());
+TEST_F(TimedDoorTest, LockMth) {
+    door.unlock();
+    door.lock();
+    EXPECT_FALSE(door.isDoorOpened());
 }
 
-TEST_F(TimedDoorTest, TimeoutWithMultipleRegisters) {
-    door->unlock();
-    timer->tregister(1, adapter);
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    EXPECT_THROW(adapter->Timeout(), std::runtime_error);
+TEST_F(TimedDoorTest, ClosedDoor) {
+    EXPECT_FALSE(door.isDoorOpened());
 }
 
-TEST_F(TimedDoorTest, TimeoutDoesNotThrowWhenDoorLocked) {
-    door->lock();
-    EXPECT_NO_THROW(timer->tregister(1, adapter));
+TEST_F(TimedDoorTest, UnlockThrow) {
+    door.unlock();
+    EXPECT_THROW(door.unlock(), std::logic_error);
 }
 
-TEST_F(TimedDoorTest, AdapterCallsThrowStateOnTimeout) {
-    door->unlock();
-    EXPECT_CALL(*door, throwState()).Times(1);
-    adapter->Timeout();
+TEST_F(TimedDoorTest, ThrowState) {
+    door.unlock();
+    EXPECT_THROW(door.throwState(), std::runtime_error);
 }
 
-TEST_F(TimedDoorTest, TimerWorksCorrectly) {
-    door->lock();
-    EXPECT_NO_THROW(timer->tregister(2, adapter));
+TEST_F(TimedDoorTest, CloseBefore) {
+    EXPECT_NO_THROW(door.throwState());
 }
 
-TEST_F(TimedDoorTest, TimerDoesNotCallWhenDoorClosed) {
-    door->lock();
-    EXPECT_NO_THROW(timer->tregister(1, adapter));
+TEST_F(TimedDoorTest, LockDtw) {
+    EXPECT_THROW(door.lock(), std::logic_error);
 }

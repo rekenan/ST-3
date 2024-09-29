@@ -1,8 +1,9 @@
 // Copyright 2024 MamedovKenan
-#include "../include/TimedDoor.h"
+
+#include "TimedDoor.h"
 #include <stdexcept>
-#include <thread>
-#include <chrono>
+#include <thread> // NOLINT [build/c++11]
+#include <chrono> // NOLINT [build/c++11]
 
 DoorTimerAdapter::DoorTimerAdapter(TimedDoor& d) : door(d) {}
 
@@ -41,7 +42,7 @@ void TimedDoor::throwState() {
 void Timer::tregister(int seconds, TimerClient* client) {
     this->client = client;
 
-    std::thread([this, seconds]() {
+    std::thread([this, seconds, client]() {
         sleep(seconds);
         client->Timeout();
     }).detach();
